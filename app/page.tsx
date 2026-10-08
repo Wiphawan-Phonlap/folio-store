@@ -1,29 +1,34 @@
 import { Suspense } from "react";
 import { supabase } from "@/lib/supabase";
+import Header from "@/components/Header";
+import BookCard from "@/components/BookCard";
 
-async function ProductList() {
+async function BookGrid() {
   const { data: products, error } = await supabase.from("products").select("*");
 
   if (error) return <p>เกิดข้อผิดพลาด: {error.message}</p>;
 
   return (
-    <ul className="space-y-2">
-      {products?.map((p) => (
-        <li key={p.id}>
-          {p.title} — {p.author} — ฿{p.price}
-        </li>
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {products?.map((p, i) => (
+        <BookCard key={p.id} product={p} index={i} />
       ))}
-    </ul>
+    </div>
   );
 }
 
 export default function Home() {
   return (
-    <main className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Folio & Co.</h1>
-      <Suspense fallback={<p>กำลังโหลด...</p>}>
-        <ProductList />
-      </Suspense>
-    </main>
+    <>
+      <Header />
+      <main className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+        <h2 className="mb-4 text-sm font-bold text-[#142d20]">
+          วรรณกรรมคัดสรรยอดนิยมประจำสัปดาห์
+        </h2>
+        <Suspense fallback={<p>กำลังโหลด...</p>}>
+          <BookGrid />
+        </Suspense>
+      </main>
+    </>
   );
 }
