@@ -1,3 +1,5 @@
+import AddToCartButton from "./AddToCartButton";
+
 export type Product = {
   id: number;
   title: string;
@@ -37,9 +39,7 @@ export default function BookCard({
         <span className="text-sm font-bold text-[#1b3b2b]">
           ฿{product.price}
         </span>
-        <button className="rounded bg-[#f0f5f0] px-2 py-1 text-[#1b3b2b] hover:bg-[#1b3b2b] hover:text-white">
-          ＋
-        </button>
+        <AddToCartButton product={product} />
       </div>
     </div>
   );

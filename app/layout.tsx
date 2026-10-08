@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Playfair_Display } from "next/font/google";
+import { CartProvider } from "@/lib/cart";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -24,7 +25,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="th" className={`${jakarta.variable} ${playfair.variable}`}>
-      <body>{children}</body>
+      <body>
+        <CartProvider>{children}</CartProvider>
+      </body>
     </html>
   );
 }
