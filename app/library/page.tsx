@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase-browser";
 
 type OrderItem = {
   id: number;
+  product_id: number;
   title: string;
   price: number;
   qty: number;
@@ -25,6 +26,8 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(true);
   const [loggedIn, setLoggedIn] = useState(true);
   const [error, setError] = useState("");
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+  const [dlError, setDlError] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -39,7 +42,9 @@ export default function LibraryPage() {
 
       const { data, error } = await supabase
         .from("orders")
-        .select("id, total, status, created_at, order_items(id, title, price, qty)")
+        .select(
+          "id, total, status, created_at, order_items(id, product_id, title, price, qty)"
+        )
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -51,6 +56,32 @@ export default function LibraryPage() {
     }
     load();
   }, []);
+
+  async function handleDownload(productId: number, key: string) {
+    setDownloadingKey(key);
+    setDlError("");
+    const supabase = createClient();
+
+    const { data, error } = await supabase.storage
+      .from("books")
+      .createSignedUrl(`${productId}.pdf`, 60, { download: true });
+
+    setDownloadingKey(null);
+
+    if (error || !data) {
+      setDlError(
+        "ดาวน์โหลดไม่สำเร็จ ไฟล์อาจยังไม่ถูกอัปโหลด กรุณาลองใหม่ภายหลัง"
+      );
+      return;
+    }
+    window.location.href = data.signedUrl;
+  }
+
+  function statusLabel(status: string) {
+    if (status === "pending") return "รอชำระเงิน";
+    if (status === "paid") return "ชำระเงินแล้ว";
+    return status;
+  }
 
   return (
     <div className="min-h-screen bg-[#F6FBF5] text-[#1A2E22]">
@@ -68,8 +99,10 @@ export default function LibraryPage() {
           ห้องสมุดของฉัน
         </h1>
         <p className="mb-6 text-xs text-[#71877a]">
-          ประวัติคำสั่งซื้อทั้งหมดของคุณ
+          ประวัติคำสั่งซื้อและไฟล์หนังสือของคุณ
         </p>
+
+        {dlError && <p className="mb-4 text-xs text-red-600">{dlError}</p>}
 
         {loading ? (
           <p className="text-sm text-[#71877a]">กำลังโหลด...</p>
@@ -126,31 +159,53 @@ export default function LibraryPage() {
                       })}
                     </p>
                   </div>
-                  <span className="rounded-full bg-[#f0f5f0] px-2.5 py-0.5 text-[10px] font-bold text-[#1b3b2b]">
-                    {order.status === "pending" ? "รอชำระเงิน" : order.status}
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                      order.status === "paid"
+                        ? "bg-[#1b3b2b] text-white"
+                        : "bg-[#f0f5f0] text-[#1b3b2b]"
+                    }`}
+                  >
+                    {statusLabel(order.status)}
                   </span>
                 </div>
 
-                <ul className="space-y-2">
-                  {order.order_items.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex items-center justify-between text-xs"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-[#142d20]">
-                        {item.title}
-                        <span className="text-[#71877a]"> × {item.qty}</span>
-                      </span>
-                      <span className="ml-3 font-semibold text-[#1b3b2b]">
-                        ฿{(item.price * item.qty).toLocaleString()}
-                      </span>
-                    </li>
-                  ))}
+                <ul className="space-y-2.5">
+                  {order.order_items.map((item) => {
+                    const key = `${order.id}-${item.id}`;
+                    return (
+                      <li
+                        key={item.id}
+                        className="flex items-center justify-between gap-3 text-xs"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[#142d20]">
+                          {item.title}
+                          <span className="text-[#71877a]"> × {item.qty}</span>
+                        </span>
+
+                        {order.status === "paid" && (
+                          <button
+                            onClick={() => handleDownload(item.product_id, key)}
+                            disabled={downloadingKey === key}
+                            className="rounded-lg bg-[#C5A059] px-3 py-1 text-[11px] font-bold text-[#142d20] hover:bg-[#d4af37] disabled:opacity-60"
+                          >
+                            {downloadingKey === key
+                              ? "กำลังเตรียมไฟล์..."
+                              : "ดาวน์โหลด"}
+                          </button>
+                        )}
+
+                        <span className="w-16 text-right font-semibold text-[#1b3b2b]">
+                          ฿{(item.price * item.qty).toLocaleString()}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
 
                 <div className="mt-3 flex items-center justify-between border-t border-[#e3ece5] pt-3">
                   <span className="text-xs text-[#71877a]">ยอดรวม</span>
-                  <span className="font-serif text-lg font-bold text-[#142d20]">
+                  <span className="text-lg font-bold text-[#142d20]">
                     ฿{order.total.toLocaleString()}
                   </span>
                 </div>
