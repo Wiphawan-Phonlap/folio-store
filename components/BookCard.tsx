@@ -3,8 +3,11 @@ export type Product = {
   title: string;
   author: string;
   price: number;
+  description?: string | null;
+  subtitle?: string | null;
+  is_featured?: boolean | null;
+  category_id?: number | null;
 };
-
 const coverColors = ["#1b3b2b", "#542b1a", "#233748", "#4a1e2b"];
 
 export default function BookCard({
