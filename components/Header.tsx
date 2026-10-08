@@ -1,3 +1,5 @@
+import AuthButton from "./AuthButton";
+
 export default function Header() {
   return (
     <header className="border-b border-[#e3ece5] bg-white">
@@ -29,12 +31,7 @@ export default function Header() {
           <a href="#" className="hidden hover:text-[#1b3b2b] md:block">
             ห้องสมุดของฉัน
           </a>
-          <a
-            href="#"
-            className="rounded-lg bg-[#1b3b2b] px-4 py-2 text-white hover:bg-[#142d20]"
-          >
-            เข้าสู่ระบบ
-          </a>
+          <AuthButton />
         </nav>
       </div>
     </header>
