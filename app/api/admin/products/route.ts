@@ -1,0 +1,101 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminApi } from "@/lib/admin-auth";
+import { createAdminClient } from "@/lib/supabase-admin";
+
+export async function GET(_req: NextRequest) {
+  const { errorResponse } = await requireAdminApi();
+  if (errorResponse) return errorResponse;
+
+  try {
+    const supabaseAdmin = createAdminClient();
+
+    const [productsRes, categoriesRes, filesRes] = await Promise.all([
+      supabaseAdmin.from("products").select("*").order("id", { ascending: true }),
+      supabaseAdmin.from("categories").select("*").order("id", { ascending: true }),
+      supabaseAdmin.storage.from("books").list("", { limit: 1000 }),
+    ]);
+
+    if (productsRes.error) {
+      return NextResponse.json(
+        { error: productsRes.error.message },
+        { status: 500 }
+      );
+    }
+
+    const existingFiles = new Set(
+      filesRes.data?.map((f) => f.name.toLowerCase()) || []
+    );
+
+    const products = (productsRes.data || []).map((product) => ({
+      ...product,
+      has_file: existingFiles.has(`${product.id}.pdf`.toLowerCase()),
+    }));
+
+    return NextResponse.json({
+      products,
+      categories: categoriesRes.data || [],
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const { errorResponse } = await requireAdminApi();
+  if (errorResponse) return errorResponse;
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const {
+      title,
+      author,
+      price,
+      subtitle,
+      description,
+      category_id,
+      is_featured,
+    } = body;
+
+    // ตรวจสอบความถูกต้องของข้อมูลฝั่งเซิร์ฟเวอร์
+    if (!title || typeof title !== "string" || !title.trim()) {
+      return NextResponse.json(
+        { error: "กรุณาระบุชื่อหนังสือ (title)" },
+        { status: 400 }
+      );
+    }
+
+    const numPrice = Number(price);
+    if (isNaN(numPrice) || numPrice < 0) {
+      return NextResponse.json(
+        { error: "ราคาต้องเป็นตัวเลขและไม่ติดลบ (price >= 0)" },
+        { status: 400 }
+      );
+    }
+
+    const supabaseAdmin = createAdminClient();
+
+    const { data, error } = await supabaseAdmin
+      .from("products")
+      .insert({
+        title: title.trim(),
+        author: author?.trim() || "",
+        price: numPrice,
+        subtitle: subtitle?.trim() || null,
+        description: description?.trim() || null,
+        category_id: category_id ? Number(category_id) : null,
+        is_featured: !!is_featured,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ product: data }, { status: 201 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

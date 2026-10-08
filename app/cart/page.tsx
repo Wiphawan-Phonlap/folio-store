@@ -29,13 +29,19 @@ export default function CartPage() {
       return;
     }
 
+    // สร้างออเดอร์สถานะ pending
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .insert({ total })
+      .insert({
+        user_id: userData.user.id,
+        total,
+        status: "pending",
+      })
       .select("id")
       .single();
 
     if (orderError || !order) {
+      console.error("Failed to create order:", orderError);
       setError("สั่งซื้อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       setPlacing(false);
       return;
@@ -52,14 +58,39 @@ export default function CartPage() {
     );
 
     if (itemsError) {
+      console.error("Failed to save order items:", itemsError);
       setError("บันทึกรายการหนังสือไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       setPlacing(false);
       return;
     }
 
-    clear();
-    setOrderId(order.id);
-    setPlacing(false);
+    // เรียก API route เพื่อสร้าง Stripe Checkout Session
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.url) {
+        setError(data.error || "สร้างรายการชำระเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+        setPlacing(false);
+        return;
+      }
+
+      // ล้างตะกร้าและ redirect ไปหน้าชำระเงินของ Stripe
+      clear();
+      setOrderId(order.id);
+      window.location.href = data.url;
+    } catch (err: unknown) {
+      console.error("Checkout request failed:", err);
+      setError("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง");
+      setPlacing(false);
+    }
   }
 
   return (
@@ -229,7 +260,7 @@ export default function CartPage() {
                   disabled={placing}
                   className="w-full rounded-lg bg-[#C5A059] py-2.5 text-xs font-bold text-[#142d20] hover:bg-[#d4af37] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {placing ? "กำลังสั่งซื้อ..." : "สั่งซื้อ"}
+                  {placing ? "กำลังไปหน้าชำระเงิน..." : "สั่งซื้อ"}
                 </button>
 
                 {error && (
