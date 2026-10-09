@@ -10,10 +10,9 @@ export async function GET() {
   try {
     const supabaseAdmin = createAdminClient();
 
-    const [productsRes, categoriesRes, filesRes] = await Promise.all([
+    const [productsRes, categoriesRes] = await Promise.all([
       supabaseAdmin.from("products").select("*").order("id", { ascending: true }),
       supabaseAdmin.from("categories").select("*").order("id", { ascending: true }),
-      supabaseAdmin.storage.from("books").list("", { limit: 1000 }),
     ]);
 
     if (productsRes.error) {
@@ -23,14 +22,10 @@ export async function GET() {
       );
     }
 
-    const existingFiles = new Set(
-      filesRes.data?.map((f) => f.name.toLowerCase()) || []
-    );
-
     const products = (productsRes.data || []).map((product) => ({
       ...product,
       cover_url: getCoverUrl(product.cover_path),
-      has_file: existingFiles.has(`${product.id}.pdf`.toLowerCase()),
+      has_file: typeof product.pdf_path === "string" && product.pdf_path.trim().length > 0,
     }));
 
     return NextResponse.json({
