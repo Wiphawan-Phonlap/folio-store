@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
 import { getStripe } from "@/lib/stripe";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 
 export async function POST(req: NextRequest) {
@@ -65,8 +66,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ดึงรายการ order_items ของคำสั่งซื้อนี้
-    const { data: orderItems, error: itemsError } = await supabase
+    const admin = createAdminClient();
+    const { data: paidItems, error: paidItemsError } = await admin
+      .from("order_items")
+      .select("product_id, orders!inner(user_id, status)")
+      .eq("orders.user_id", user.id)
+      .eq("orders.status", "paid");
+    if (paidItemsError) return NextResponse.json({ error: "ไม่สามารถตรวจสอบหนังสือที่ซื้อแล้วได้" }, { status: 500 });
+    const ownedIds = new Set((paidItems || []).map((item) => item.product_id));
+
+    const { data: orderItems, error: itemsError } = await admin
       .from("order_items")
       .select("id, product_id, qty")
       .eq("order_id", orderId);
@@ -77,12 +86,20 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    const remainingItems = orderItems.filter((item) => !ownedIds.has(item.product_id));
+    if (remainingItems.length === 0) {
+      await admin.from("orders").update({ status: "failed" }).eq("id", orderId).eq("status", "pending");
+      return NextResponse.json({ error: "คุณมีหนังสือเล่มนี้แล้ว" }, { status: 400 });
+    }
+    if (remainingItems.length !== orderItems.length) {
+      await admin.from("order_items").delete().eq("order_id", orderId).in("product_id", [...ownedIds]);
+    }
 
     // 3. คิดราคาจากตาราง products ฝั่งเซิร์ฟเวอร์ ห้ามเชื่อราคาที่ client ส่งมา
-    const productIds = orderItems.map((item) => item.product_id);
-    const { data: products, error: productsError } = await supabase
+    const productIds = remainingItems.map((item) => item.product_id);
+    const { data: products, error: productsError } = await admin
       .from("products")
-      .select("id, title, price")
+      .select("id, title, price, is_published")
       .in("id", productIds);
 
     if (productsError || !products || products.length === 0) {
@@ -92,9 +109,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const productMap = new Map(products.map((p) => [p.id, p]));
+    const unavailableIds = products.filter((p) => p.is_published === false).map((p) => p.id);
+    if (unavailableIds.length) {
+      await admin.from("order_items").delete().eq("order_id", orderId).in("product_id", unavailableIds);
+    }
+    const productMap = new Map(products.filter((p) => p.is_published !== false).map((p) => [p.id, p]));
+    if (productMap.size === 0) {
+      await admin.from("orders").update({ status: "failed" }).eq("id", orderId).eq("status", "pending");
+      return NextResponse.json({ error: "หนังสือในคำสั่งซื้อถูกซ่อนแล้ว กรุณากลับไปเลือกหนังสือใหม่" }, { status: 400 });
+    }
 
-    for (const item of orderItems) {
+    for (const item of remainingItems) {
       if (!productMap.has(item.product_id)) {
         return NextResponse.json(
           { error: `ไม่พบสินค้า ID: ${item.product_id} ในระบบ` },
@@ -103,7 +128,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const line_items = orderItems.map((item) => {
+    const line_items = remainingItems.map((item) => {
       const product = productMap.get(item.product_id)!;
       const unitPrice = Number(product.price);
       return {
@@ -130,7 +155,7 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       line_items,
       mode: "payment",
-      success_url: `${origin}/library?success=true&order_id=${order.id}`,
+      success_url: `${origin}/checkout/success?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/cart`,
       client_reference_id: String(order.id),
       customer_email: user.email,
@@ -140,6 +165,25 @@ export async function POST(req: NextRequest) {
         user_id: user.id,
       },
     });
+
+    const { error: sessionUpdateError } = await admin
+      .from("orders")
+      .update({ stripe_session_id: session.id })
+      .eq("id", order.id)
+      .eq("user_id", user.id)
+      .eq("status", "pending");
+
+    if (sessionUpdateError) {
+      console.error("Failed to save Stripe session ID:", {
+        message: sessionUpdateError.message,
+        code: sessionUpdateError.code,
+        details: sessionUpdateError.details,
+      });
+      return NextResponse.json(
+        { error: "บันทึกข้อมูลการชำระเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ url: session.url, sessionId: session.id });
   } catch (error: unknown) {

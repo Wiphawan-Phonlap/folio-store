@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminApi } from "@/lib/admin-auth";
+import { requireAdminApi } from "@/lib/require-admin";
 import { createAdminClient } from "@/lib/supabase-admin";
 
 export async function POST(

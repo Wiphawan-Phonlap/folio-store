@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function SearchBarContent() {
@@ -8,10 +8,6 @@ function SearchBarContent() {
   const searchParams = useSearchParams();
   const currentQ = searchParams.get("q") ?? "";
   const [searchTerm, setSearchTerm] = useState(currentQ);
-
-  useEffect(() => {
-    setSearchTerm(currentQ);
-  }, [currentQ]);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -34,6 +30,7 @@ function SearchBarContent() {
       className="relative flex min-w-0 flex-1 items-center md:max-w-[16rem] lg:max-w-xs"
     >
       <input
+        key={currentQ}
         type="text"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}

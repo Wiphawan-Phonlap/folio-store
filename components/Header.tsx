@@ -3,6 +3,7 @@ import AuthButton from "./AuthButton";
 import CartButton from "./CartButton";
 import SearchBar from "./SearchBar";
 import AdminNavLink from "./AdminNavLink";
+import OrderHistoryLink from "./OrderHistoryLink";
 
 export default function Header() {
   return (
@@ -34,6 +35,7 @@ export default function Header() {
           <Link href="/library" className="hidden hover:text-[#1b3b2b] md:block">
             ห้องสมุดของฉัน
           </Link>
+          <OrderHistoryLink />
           <AdminNavLink />
           <CartButton />
           <AuthButton />

@@ -38,12 +38,12 @@ export default function AdminNavLink() {
 
   return (
     <Link
-      href="/admin/products"
+      href="/admin"
       className="inline-flex items-center gap-1 rounded-lg border border-[#C5A059] bg-[#1b3b2b] px-2.5 py-1.5 text-xs font-semibold text-[#C5A059] transition hover:bg-[#142d20] hover:text-white"
-      title="แผงควบคุมผู้ดูแลระบบ"
+      title="ไปยังแดชบอร์ดผู้ดูแลระบบ"
     >
       <span>⚙️</span>
-      <span>Admin</span>
+      <span>แดชบอร์ดแอดมิน</span>
     </Link>
   );
 }

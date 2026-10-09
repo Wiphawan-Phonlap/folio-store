@@ -1,6 +1,9 @@
 import type { Product } from "./BookCard";
+import Link from "next/link";
+import { coverColor } from "@/lib/cover-colors";
 
-export default function Hero({ product }: { product: Product }) {
+export default function Hero({ product, ownedIds = [] }: { product: Product; ownedIds?: number[] }) {
+  const owned = ownedIds.includes(product.id);
   return (
     <section className="rounded-2xl border border-[#e3ece5] bg-gradient-to-r from-white to-[#eff5f0] p-6 shadow-sm md:p-8">
       <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
@@ -20,16 +23,22 @@ export default function Hero({ product }: { product: Product }) {
             <p className="mb-5 text-xs text-[#71877a]">{product.description}</p>
           )}
           <div className="flex flex-wrap items-center gap-3">
-            <button className="rounded-lg bg-[#1b3b2b] px-5 py-2.5 text-xs font-semibold text-white shadow hover:bg-[#142d20]">
-              สั่งซื้อฉบับดิจิทัล ฿{product.price}
-            </button>
-            <button className="rounded-lg border border-[#d0dcd2] bg-white px-4 py-2.5 text-xs font-medium text-[#1b3b2b] hover:bg-[#f9fcf9]">
+            <Link
+              href={owned ? "/library" : `/books/${product.id}`}
+              className="rounded-lg bg-[#1b3b2b] px-5 py-2.5 text-xs font-semibold text-white shadow hover:bg-[#142d20]"
+            >
+              {owned ? "อยู่ในห้องสมุดแล้ว" : `สั่งซื้อฉบับดิจิทัล ฿${product.price}`}
+            </Link>
+            <Link
+              href={`/books/${product.id}#preview`}
+              className="rounded-lg border border-[#d0dcd2] bg-white px-4 py-2.5 text-xs font-medium text-[#1b3b2b] hover:bg-[#f9fcf9]"
+            >
               ทดลองอ่านตัวอย่างฟรี
-            </button>
+            </Link>
           </div>
         </div>
 
-        <div className="flex h-56 w-40 shrink-0 flex-col justify-between rounded-l-sm rounded-r-lg border-l-4 border-[#0d1812] bg-[#16291e] p-4 text-center shadow-xl">
+        <div style={{ backgroundColor: coverColor(product.id) }} className="flex h-56 w-40 shrink-0 flex-col justify-between rounded-l-sm rounded-r-lg border-l-4 border-[#0d1812] bg-[#16291e] p-4 text-center shadow-xl">
           <div className="text-[9px] uppercase tracking-widest text-[#c5a059]">
             Folio Deluxe Edition
           </div>

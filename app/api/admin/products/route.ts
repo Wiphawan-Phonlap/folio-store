@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminApi } from "@/lib/admin-auth";
+import { requireAdminApi } from "@/lib/require-admin";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { getCoverUrl } from "@/lib/cover-url";
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const { errorResponse } = await requireAdminApi();
   if (errorResponse) return errorResponse;
 
@@ -28,6 +29,7 @@ export async function GET(_req: NextRequest) {
 
     const products = (productsRes.data || []).map((product) => ({
       ...product,
+      cover_url: getCoverUrl(product.cover_path),
       has_file: existingFiles.has(`${product.id}.pdf`.toLowerCase()),
     }));
 
@@ -55,6 +57,7 @@ export async function POST(req: NextRequest) {
       description,
       category_id,
       is_featured,
+      is_published,
     } = body;
 
     // ตรวจสอบความถูกต้องของข้อมูลฝั่งเซิร์ฟเวอร์
@@ -85,6 +88,7 @@ export async function POST(req: NextRequest) {
         description: description?.trim() || null,
         category_id: category_id ? Number(category_id) : null,
         is_featured: !!is_featured,
+        is_published: is_published !== false,
       })
       .select()
       .single();

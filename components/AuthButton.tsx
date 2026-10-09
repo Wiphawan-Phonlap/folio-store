@@ -27,6 +27,7 @@ export default function AuthButton() {
 
   async function handleLogout() {
     await createClient().auth.signOut();
+    router.push("/");
     router.refresh();
   }
 

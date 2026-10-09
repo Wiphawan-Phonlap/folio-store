@@ -53,10 +53,25 @@ export default function AdminProductsPage() {
   }, []);
 
   useEffect(() => {
-    loadData();
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadData]);
 
-  async function handleDelete(product: ProductWithFile, confirmWithOrders = false) {
+  async function togglePublished(product: ProductWithFile) {
+    const response = await fetch(`/api/admin/products/${product.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...product, is_published: product.is_published === false }),
+    });
+    const data = await response.json();
+    if (!response.ok) setError(data.error || "เปลี่ยนสถานะการเผยแพร่ไม่สำเร็จ");
+    else await loadData();
+  }
+
+  async function handleDelete(product: ProductWithFile) {
     setError("");
     setDeletingId(product.id);
 
@@ -64,7 +79,7 @@ export default function AdminProductsPage() {
       const res = await fetch(`/api/admin/products/${product.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmWithOrders }),
+        body: JSON.stringify({}),
       });
 
       const data = await res.json();
@@ -184,6 +199,7 @@ export default function AdminProductsPage() {
                     <th className="px-4 py-3 font-semibold">หมวดหมู่</th>
                     <th className="px-4 py-3 font-semibold text-right">ราคา</th>
                     <th className="px-4 py-3 font-semibold text-center">สถานะไฟล์ PDF</th>
+                    <th className="px-4 py-3 font-semibold text-center">เผยแพร่</th>
                     <th className="px-4 py-3 font-semibold text-right">จัดการ</th>
                   </tr>
                 </thead>
@@ -228,6 +244,11 @@ export default function AdminProductsPage() {
                           </span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        <button onClick={() => void togglePublished(product)} className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${product.is_published === false ? "bg-gray-100 text-gray-600" : "bg-emerald-50 text-emerald-700"}`}>
+                          {product.is_published === false ? "ซ่อนอยู่" : "เผยแพร่"}
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
@@ -250,7 +271,7 @@ export default function AdminProductsPage() {
                             ✏️ แก้ไข
                           </button>
                           <button
-                            onClick={() => handleDelete(product)}
+                            onClick={() => void handleDelete(product)}
                             disabled={deletingId === product.id}
                             className="rounded border border-red-200 bg-white px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                           >
@@ -337,7 +358,7 @@ export default function AdminProductsPage() {
                     ✏️ แก้ไข
                   </button>
                   <button
-                    onClick={() => handleDelete(product)}
+                    onClick={() => void handleDelete(product)}
                     disabled={deletingId === product.id}
                     className="rounded-lg border border-red-200 bg-white py-1.5 text-center text-[10px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
@@ -386,9 +407,8 @@ export default function AdminProductsPage() {
             </p>
 
             <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900 border border-amber-200">
-              📌 <strong>นโยบายความปลอดภัย:</strong> หากยืนยันที่จะลบหนังสือนี้ออกจากรายการขาย
-              <strong> ระบบจะห้ามลบไฟล์ PDF ใน Storage ของเล่มนี้</strong>{" "}
-              เพื่อให้ลูกค้าที่เคยสั่งซื้อไปยังสามารถดาวน์โหลดอ่านได้ตามสิทธิ์
+              📌 หนังสือที่มีประวัติการสั่งซื้อไม่สามารถลบได้ เพื่อรักษาประวัติและสิทธิ์ดาวน์โหลด
+              กรุณาใช้สวิตช์ “ซ่อนอยู่” แทน
             </div>
 
             <div className="flex justify-end gap-2 border-t border-[#e3ece5] pt-3 text-xs">
@@ -397,12 +417,6 @@ export default function AdminProductsPage() {
                 className="rounded-lg border border-[#dce6de] px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
               >
                 ยกเลิก
-              </button>
-              <button
-                onClick={() => handleDelete(deleteWarning.product, true)}
-                className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white shadow-sm hover:bg-red-700"
-              >
-                ยืนยันการลบ (คงไฟล์ไว้)
               </button>
             </div>
           </div>

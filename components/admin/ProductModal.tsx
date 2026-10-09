@@ -30,6 +30,11 @@ export default function ProductModal({
     product?.category_id?.toString() || ""
   );
   const [isFeatured, setIsFeatured] = useState(!!product?.is_featured);
+  const [isPublished, setIsPublished] = useState(product?.is_published !== false);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [epubFile, setEpubFile] = useState<File | null>(null);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -61,6 +66,7 @@ export default function ProductModal({
       description: description.trim() || null,
       category_id: categoryId ? Number(categoryId) : null,
       is_featured: isFeatured,
+      is_published: isPublished,
     };
 
     try {
@@ -82,6 +88,19 @@ export default function ProductModal({
         return;
       }
 
+      const productId = data.product?.id || product?.id;
+      const files = { cover: coverFile, pdf: pdfFile, epub: epubFile, preview: previewFile };
+      const selectedFiles = Object.entries(files).filter(([, file]) => file) as [string, File][];
+      if (productId && selectedFiles.length > 0) {
+        const form = new FormData();
+        for (const [key, file] of selectedFiles) form.append(key, file);
+        const fileResponse = await fetch(`/api/admin/products/${productId}/files`, { method: "POST", body: form });
+        const fileData = await fileResponse.json();
+        if (!fileResponse.ok) {
+          setError(fileData.error || "อัปโหลดไฟล์ไม่สำเร็จ");
+          return;
+        }
+      }
       onSuccess();
       onClose();
     } catch (err: unknown) {
@@ -217,6 +236,24 @@ export default function ProductModal({
             >
               ✦ แนะนำเป็นวรรณกรรมคัดสรรเด่นประจำเดือน (Featured Book)
             </label>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <input type="checkbox" id="is_published" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-[#1b3b2b] focus:ring-[#1b3b2b]" />
+            <label htmlFor="is_published" className="cursor-pointer font-medium text-[#142d20]">เผยแพร่หนังสือให้ลูกค้าเห็น</label>
+          </div>
+
+          <div className="grid gap-3 border-t border-[#e3ece5] pt-4 sm:grid-cols-2">
+            {[
+              ["cover", "ปกหนังสือ (JPG, PNG, WEBP ไม่เกิน 2 MB)", setCoverFile],
+              ["pdf", "ไฟล์ PDF", setPdfFile],
+              ["epub", "ไฟล์ EPUB", setEpubFile],
+              ["preview", "ไฟล์ตัวอย่าง PDF", setPreviewFile],
+            ].map(([key, label, setter]) => (
+              <label key={key as string} className="block">
+                <span className="mb-1 block font-semibold text-[#142d20]">{label as string}</span>
+                <input type="file" accept={key === "cover" ? "image/jpeg,image/png,image/webp" : key === "epub" ? ".epub,application/epub+zip" : "application/pdf"} onChange={(e) => (setter as (file: File | null) => void)(e.target.files?.[0] || null)} className="w-full text-[11px] text-[#71877a]" />
+              </label>
+            ))}
           </div>
 
           <div className="flex justify-end gap-2 border-t border-[#e3ece5] pt-4">

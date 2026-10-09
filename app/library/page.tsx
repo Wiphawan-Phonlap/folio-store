@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { createClient } from "@/lib/supabase-browser";
@@ -11,6 +12,7 @@ type OrderItem = {
   title: string;
   price: number;
   qty: number;
+  products?: { pdf_path?: string | null; epub_path?: string | null } | null;
 };
 
 type Order = {
@@ -21,7 +23,7 @@ type Order = {
   order_items: OrderItem[];
 };
 
-export default function LibraryPage() {
+function LibraryContent() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [loggedIn, setLoggedIn] = useState(true);
@@ -43,11 +45,17 @@ export default function LibraryPage() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, total, status, created_at, order_items(id, product_id, title, price, qty)"
+          "id, total, status, created_at, order_items(id, product_id, title, price, qty, products(pdf_path, epub_path))"
         )
         .order("created_at", { ascending: false });
 
       if (error) {
+        console.error("[library] Failed to load order history", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
         setError("โหลดประวัติคำสั่งซื้อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       } else {
         setOrders((data as Order[]) ?? []);
@@ -57,24 +65,17 @@ export default function LibraryPage() {
     load();
   }, []);
 
-  async function handleDownload(productId: number, key: string) {
+  async function handleDownload(productId: number, format: "pdf" | "epub", key: string) {
     setDownloadingKey(key);
     setDlError("");
-    const supabase = createClient();
-
-    const { data, error } = await supabase.storage
-      .from("books")
-      .createSignedUrl(`${productId}.pdf`, 60, { download: true });
-
+    const response = await fetch(`/api/library/download?productId=${productId}&format=${format}`);
+    const data = await response.json();
     setDownloadingKey(null);
-
-    if (error || !data) {
-      setDlError(
-        "ดาวน์โหลดไม่สำเร็จ ไฟล์อาจยังไม่ถูกอัปโหลด กรุณาลองใหม่ภายหลัง"
-      );
+    if (!response.ok || !data.url) {
+      setDlError(data.error || "ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่ภายหลัง");
       return;
     }
-    window.location.href = data.signedUrl;
+    window.location.assign(data.url);
   }
 
   function statusLabel(status: string) {
@@ -184,15 +185,26 @@ export default function LibraryPage() {
                         </span>
 
                         {order.status === "paid" && (
-                          <button
-                            onClick={() => handleDownload(item.product_id, key)}
-                            disabled={downloadingKey === key}
-                            className="rounded-lg bg-[#C5A059] px-3 py-1 text-[11px] font-bold text-[#142d20] hover:bg-[#d4af37] disabled:opacity-60"
-                          >
-                            {downloadingKey === key
-                              ? "กำลังเตรียมไฟล์..."
-                              : "ดาวน์โหลด"}
-                          </button>
+                          <div className="flex shrink-0 gap-1">
+                            {item.products?.pdf_path && (
+                              <button
+                                onClick={() => void handleDownload(item.product_id, "pdf", `${key}-pdf`)}
+                                disabled={downloadingKey === `${key}-pdf`}
+                                className="rounded-lg bg-[#C5A059] px-2.5 py-1 text-[11px] font-bold text-[#142d20] disabled:opacity-60"
+                              >
+                                {downloadingKey === `${key}-pdf` ? "..." : "PDF"}
+                              </button>
+                            )}
+                            {item.products?.epub_path && (
+                              <button
+                                onClick={() => void handleDownload(item.product_id, "epub", `${key}-epub`)}
+                                disabled={downloadingKey === `${key}-epub`}
+                                className="rounded-lg border border-[#C5A059] px-2.5 py-1 text-[11px] font-bold text-[#1B3B2B] disabled:opacity-60"
+                              >
+                                {downloadingKey === `${key}-epub` ? "..." : "EPUB"}
+                              </button>
+                            )}
+                          </div>
                         )}
 
                         <span className="w-16 text-right font-semibold text-[#1b3b2b]">
@@ -215,5 +227,19 @@ export default function LibraryPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function LibraryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F6FBF5] px-4 py-8 text-sm text-[#71877a]">
+          กำลังโหลด...
+        </div>
+      }
+    >
+      <LibraryContent />
+    </Suspense>
   );
 }

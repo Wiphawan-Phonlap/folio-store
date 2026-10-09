@@ -15,8 +15,9 @@ type Order = {
   user_id: string;
   user_email: string;
   total: number;
-  status: string;
+  status: "pending" | "paid" | "failed" | "cancelled";
   created_at: string;
+  stripe_session_id?: string | null;
   order_items: OrderItem[];
 };
 
@@ -26,44 +27,57 @@ export default function AdminOrdersPage() {
   const [error, setError] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/admin/orders", { cache: "no-store" });
+      const params = new URLSearchParams({ page: String(page) });
+      if (filterStatus !== "all") params.set("status", filterStatus);
+      if (searchTerm.trim()) params.set("search", searchTerm.trim());
+      const res = await fetch(`/api/admin/orders?${params}`, { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "โหลดรายการคำสั่งซื้อไม่สำเร็จ");
       }
       setOrders(data.orders || []);
+      setTotal(data.total || 0);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "เกิดข้อผิดพลาดในการโหลด";
       setError(msg);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filterStatus, page, searchTerm]);
 
   useEffect(() => {
-    loadOrders();
+    const timer = window.setTimeout(() => {
+      void loadOrders();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadOrders]);
 
-  const filteredOrders = orders.filter((order) => {
-    if (filterStatus !== "all" && order.status !== filterStatus) {
-      return false;
+  const filteredOrders = orders;
+
+  async function changeStatus(status: "pending" | "paid" | "cancelled") {
+    if (!selectedOrder || !window.confirm(`ยืนยันเปลี่ยนสถานะคำสั่งซื้อ #${selectedOrder.id} เป็น ${status} หรือไม่?`)) return;
+    const response = await fetch(`/api/admin/orders/${selectedOrder.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error || "เปลี่ยนสถานะไม่สำเร็จ");
+      return;
     }
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      const matchId = String(order.id).includes(term);
-      const matchEmail = order.user_email?.toLowerCase().includes(term);
-      const matchItem = order.order_items?.some((i) =>
-        i.title.toLowerCase().includes(term)
-      );
-      return matchId || matchEmail || matchItem;
-    }
-    return true;
-  });
+    setSelectedOrder(null);
+    await loadOrders();
+  }
 
   const totalRevenue = orders
     .filter((o) => o.status === "paid")
@@ -137,7 +151,7 @@ export default function AdminOrdersPage() {
         <input
           type="text"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
           placeholder="ค้นหาด้วยหมายเลขคำสั่งซื้อ, อีเมลลูกค้า หรือชื่อหนังสือ..."
           className="w-full rounded-lg border border-[#dce6de] bg-[#f0f5f0] px-3.5 py-2 text-xs outline-none focus:border-[#1b3b2b] focus:bg-white sm:max-w-xs"
         />
@@ -163,6 +177,8 @@ export default function AdminOrdersPage() {
           >
             ชำระเงินแล้ว ({paidOrdersCount})
           </button>
+          <button onClick={() => { setFilterStatus("failed"); setPage(1); }} className={`rounded-full px-3 py-1 font-medium ${filterStatus === "failed" ? "bg-red-700 text-white" : "bg-red-50 text-red-700"}`}>ไม่สำเร็จ</button>
+          <button onClick={() => { setFilterStatus("cancelled"); setPage(1); }} className={`rounded-full px-3 py-1 font-medium ${filterStatus === "cancelled" ? "bg-slate-700 text-white" : "bg-slate-50 text-slate-700"}`}>ยกเลิกแล้ว</button>
           <button
             onClick={() => setFilterStatus("pending")}
             className={`rounded-full px-3 py-1 font-medium transition ${
@@ -197,6 +213,9 @@ export default function AdminOrdersPage() {
           {filteredOrders.map((order) => (
             <div
               key={order.id}
+              onClick={() => setSelectedOrder(order)}
+              role="button"
+              tabIndex={0}
               className="rounded-2xl border border-[#e3ece5] bg-white p-4 shadow-xs sm:p-5"
             >
               {/* Order Header */}
@@ -209,10 +228,12 @@ export default function AdminOrdersPage() {
                     className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                       order.status === "paid"
                         ? "bg-emerald-100 text-emerald-800"
+                      : order.status === "failed" || order.status === "cancelled"
+                        ? "bg-red-100 text-red-700"
                         : "bg-amber-100 text-amber-800"
                     }`}
                   >
-                    {order.status === "paid" ? "✓ ชำระเงินแล้ว" : "⏳ รอชำระเงิน"}
+                    {order.status === "paid" ? "✓ ชำระเงินแล้ว" : order.status === "cancelled" ? "ยกเลิกแล้ว" : order.status === "failed" ? "ไม่สำเร็จ" : "⏳ รอชำระเงิน"}
                   </span>
                 </div>
 
@@ -271,6 +292,28 @@ export default function AdminOrdersPage() {
           ))}
         </div>
       )}
+      <div className="flex items-center justify-between text-xs text-[#71877a]">
+        <span>หน้า {page} / {Math.max(1, Math.ceil(total / 20))}</span>
+        <div className="flex gap-2">
+          <button disabled={page === 1} onClick={() => setPage((value) => value - 1)} className="rounded border px-3 py-1 disabled:opacity-40">ก่อนหน้า</button>
+          <button disabled={page >= Math.ceil(total / 20)} onClick={() => setPage((value) => value + 1)} className="rounded border px-3 py-1 disabled:opacity-40">ถัดไป</button>
+        </div>
+      </div>
+      {selectedOrder && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#142D20]/40 p-4" onClick={() => setSelectedOrder(null)}>
+        <div className="w-full max-w-lg rounded-2xl bg-white p-6" onClick={(event) => event.stopPropagation()}>
+          <div className="flex justify-between"><h2 className="font-serif text-xl font-bold">คำสั่งซื้อ #{selectedOrder.id}</h2><button onClick={() => setSelectedOrder(null)}>ปิด</button></div>
+          <p className="mt-3 text-xs text-[#71877a]">ผู้ซื้อ: {selectedOrder.user_email}</p>
+          <p className="text-xs text-[#71877a]">วันที่: {new Date(selectedOrder.created_at).toLocaleString("th-TH")}</p>
+          <p className="text-xs text-[#71877a]">สถานะ: {selectedOrder.status}</p>
+          <ul className="my-4 space-y-2 text-sm">{selectedOrder.order_items.map((item) => <li key={item.id} className="flex justify-between"><span>{item.title} × {item.qty}</span><span>฿{(item.price * item.qty).toLocaleString()}</span></li>)}</ul>
+          <p className="text-xs text-[#71877a]">Stripe session: {selectedOrder.stripe_session_id ? `${selectedOrder.stripe_session_id.slice(0, 18)}...` : "ไม่มีข้อมูล"}</p>
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-[#e3ece5] pt-4">
+            <button onClick={() => void changeStatus("pending")} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-800">ตั้งเป็นรอชำระ</button>
+            <button onClick={() => void changeStatus("paid")} className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-800">ตั้งเป็นชำระแล้ว</button>
+            <button onClick={() => void changeStatus("cancelled")} className="rounded-lg bg-red-100 px-3 py-2 text-xs font-semibold text-red-700">ยกเลิกคำสั่งซื้อ</button>
+          </div>
+        </div>
+      </div>}
     </div>
   );
 }

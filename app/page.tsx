@@ -5,6 +5,9 @@ import Header from "@/components/Header";
 import Hero from "@/components/Hero";
 import CategoryChips from "@/components/CategoryChips";
 import BookCard from "@/components/BookCard";
+import { getCoverUrl } from "@/lib/cover-url";
+import { connection } from "next/server";
+import { getCurrentOwnedProductIds } from "@/lib/ownership";
 
 function sanitizeSearchQuery(query: string): string {
   // กรองอักขระที่อาจทำให้ PostgREST syntax ผิดพลาด เช่น , ( ) % " ' \ : .
@@ -16,10 +19,13 @@ async function HomeContent({
 }: {
   searchParams: Promise<{ q?: string; category?: string }>;
 }) {
+  await connection();
   const { q: rawQ, category } = await searchParams;
+  const ownedIds = await getCurrentOwnedProductIds();
   const q = rawQ?.trim();
 
   let productsQuery = supabase.from("products").select("*").order("id");
+  productsQuery = productsQuery.eq("is_published", true);
 
   if (category) {
     const categoryId = Number(category);
@@ -53,7 +59,10 @@ async function HomeContent({
     );
   }
 
-  const products = productsRes.data ?? [];
+  const products = (productsRes.data ?? []).map((product) => ({
+    ...product,
+    cover_url: getCoverUrl(product.cover_path),
+  }));
   const categories = categoriesRes.data ?? [];
   const isFiltering = !!(q || category);
   const featured = !isFiltering ? products.find((p) => p.is_featured) : null;
@@ -73,7 +82,7 @@ async function HomeContent({
 
   return (
     <div className="space-y-6">
-      {featured && <Hero product={featured} />}
+      {featured && <Hero product={featured} ownedIds={ownedIds} />}
       <CategoryChips categories={categories} />
 
       <section>
@@ -109,8 +118,8 @@ async function HomeContent({
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {products.map((p, i) => (
-              <BookCard key={p.id} product={p} index={i} />
+            {products.map((p) => (
+              <BookCard key={p.id} product={p} ownedIds={ownedIds} />
             ))}
           </div>
         )}
@@ -128,6 +137,17 @@ export default function Home({
     <>
       <Header />
       <main className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+        <section className="mb-6 flex items-center gap-4 rounded-2xl border border-[#e3ece5] bg-white px-5 py-4 shadow-sm">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#1b3b2b] font-serif text-2xl font-bold text-[#f6fbf5]">
+            F
+          </div>
+          <div>
+            <p className="font-serif text-xl font-bold text-[#142d20]">Folio &amp; Co.</p>
+            <p className="mt-0.5 text-xs text-[#71877a]">
+              พื้นที่สำหรับเรื่องเล่าที่คัดสรร และห้องสมุดดิจิทัลของคุณ
+            </p>
+          </div>
+        </section>
         <Suspense
           fallback={<p className="text-xs text-[#71877a]">กำลังโหลด...</p>}
         >

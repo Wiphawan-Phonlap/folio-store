@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminApi } from "@/lib/admin-auth";
+import { requireAdminApi } from "@/lib/require-admin";
 import { createAdminClient } from "@/lib/supabase-admin";
 
 export async function PUT(
@@ -25,6 +25,7 @@ export async function PUT(
       description,
       category_id,
       is_featured,
+      is_published,
     } = body;
 
     // ตรวจสอบความถูกต้องของข้อมูลฝั่งเซิร์ฟเวอร์
@@ -44,7 +45,6 @@ export async function PUT(
     }
 
     const supabaseAdmin = createAdminClient();
-
     const { data, error } = await supabaseAdmin
       .from("products")
       .update({
@@ -55,6 +55,7 @@ export async function PUT(
         description: description?.trim() || null,
         category_id: category_id ? Number(category_id) : null,
         is_featured: !!is_featured,
+        ...(typeof is_published === "boolean" ? { is_published } : {}),
       })
       .eq("id", id)
       .select()
@@ -86,8 +87,19 @@ export async function DELETE(
 
   try {
     const supabaseAdmin = createAdminClient();
+    const { data: product, error: productError } = await supabaseAdmin
+      .from("products")
+      .select("cover_path, pdf_path, epub_path, preview_path")
+      .eq("id", id)
+      .maybeSingle();
+    if (productError) {
+      return NextResponse.json({ error: productError.message }, { status: 500 });
+    }
+    if (!product) {
+      return NextResponse.json({ error: "ไม่พบหนังสือ" }, { status: 404 });
+    }
 
-    // 1. ตรวจสอบว่ามีคำสั่งซื้อที่ซื้อเล่มนี้แล้วหรือไม่
+    // หนังสือที่อยู่ในประวัติคำสั่งซื้อห้ามลบ เพื่อไม่ให้ประวัติและการดาวน์โหลดเสียหาย
     const { data: orderItems, error: itemsError } = await supabaseAdmin
       .from("order_items")
       .select("id")
@@ -98,16 +110,12 @@ export async function DELETE(
     }
 
     const hasOrders = (orderItems?.length || 0) > 0;
-    const body = await req.json().catch(() => ({}));
-    const confirmWithOrders = body?.confirmWithOrders === true;
-
-    // ถ้ามีออเดอร์แล้ว และแอดมินยังไม่ได้กดยืนยันการลบ
-    if (hasOrders && !confirmWithOrders) {
+    if (hasOrders) {
       return NextResponse.json(
         {
           hasOrders: true,
           orderCount: orderItems?.length || 0,
-          warning: `หนังสือเล่มนี้มีคำสั่งซื้อแล้ว (${orderItems?.length} รายการ) หากยืนยันที่จะลบ ระบบจะห้ามลบไฟล์ PDF ใน Storage เพื่อให้ผู้ซื้อยังสามารถดาวน์โหลดได้`,
+          warning: `หนังสือเล่มนี้มีคำสั่งซื้อแล้ว (${orderItems?.length} รายการ) ไม่สามารถลบได้ กรุณาซ่อนหนังสือแทน`,
         },
         { status: 409 }
       );
@@ -131,12 +139,20 @@ export async function DELETE(
     // 3. จัดการไฟล์ใน Storage:
     // "ก่อนลบหนังสือ ถ้ามีออเดอร์ที่ซื้อเล่มนี้แล้ว ให้เตือนแอดมินและห้ามลบไฟล์ใน Storage ของเล่มนั้น"
     if (!hasOrders) {
-      // ถ้าไม่มีออเดอร์ สามารถลบไฟล์ออกจาก Storage ได้
-      await supabaseAdmin.storage.from("books").remove([`${id}.pdf`]);
-    } else {
-      console.log(
-        `Product #${id} deleted, but keeping Storage file because orders exist.`
-      );
+      const files = [
+        product.cover_path && { bucket: "covers", path: product.cover_path },
+        product.pdf_path && { bucket: "books", path: product.pdf_path },
+        product.epub_path && { bucket: "books", path: product.epub_path },
+        product.preview_path && { bucket: "books", path: product.preview_path },
+      ].filter((file): file is { bucket: string; path: string } => Boolean(file));
+      for (const file of files) {
+        const { error: removeError } = await supabaseAdmin.storage
+          .from(file.bucket)
+          .remove([file.path]);
+        if (removeError) {
+          console.error("Failed to remove product storage file", removeError);
+        }
+      }
     }
 
     return NextResponse.json({

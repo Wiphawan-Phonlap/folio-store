@@ -1,80 +1,131 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import { useCart } from "@/lib/cart";
-import { createClient } from "@/lib/supabase-browser";
-
-const coverColors = ["#1b3b2b", "#542b1a", "#233748", "#4a1e2b"];
+import { coverColor } from "@/lib/cover-colors";
 
 export default function CartPage() {
   const router = useRouter();
-  const { items, count, total, setQty, removeItem, clear } = useCart();
+  const { items, count, setQty, removeItem, clear, loaded } = useCart();
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
-  const [orderId, setOrderId] = useState<number | null>(null);
+  const [ownershipNotice, setOwnershipNotice] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectionInitialized = useRef(false);
+
+  useEffect(() => {
+    if (!loaded) {
+      selectionInitialized.current = false;
+      return;
+    }
+    setSelectedIds((current) => {
+      const availableIds = new Set(items.map((item) => String(item.id)));
+      if (!selectionInitialized.current && items.length > 0) {
+        selectionInitialized.current = true;
+        return availableIds;
+      }
+
+      return new Set([...current].filter((id) => availableIds.has(id)));
+    });
+  }, [items, loaded]);
+
+  const selectedItems = items.filter((item) => selectedIds.has(String(item.id)));
+  const selectedCount = selectedItems.reduce((sum, item) => sum + item.qty, 0);
+  const selectedTotal = selectedItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const allItemsSelected = items.length > 0 && selectedItems.length === items.length;
+
+  function toggleSelected(id: string | number) {
+    const key = String(id);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelectedIds(allItemsSelected ? new Set() : new Set(items.map((item) => String(item.id))));
+  }
+
+  useEffect(() => {
+    if (!loaded) return;
+    const timer = window.setTimeout(() => {
+      void fetch("/api/library/owned")
+        .then((response) => response.json())
+        .then((data: { productIds?: number[] }) => {
+          const owned = new Set(data.productIds || []);
+          const removed = items.filter((item) => owned.has(Number(item.id)));
+          if (removed.length > 0) {
+            removed.forEach((item) => removeItem(item.id));
+            setOwnershipNotice("นำหนังสือที่คุณมีแล้วออกจากตะกร้าให้แล้ว");
+          }
+        })
+        .catch((error: unknown) => console.error("ตรวจสอบหนังสือที่มีแล้วไม่สำเร็จ:", error));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [items, removeItem, loaded]);
+
+  useEffect(() => {
+    if (!loaded || !items.length) return;
+    const timer = window.setTimeout(() => {
+      void fetch("/api/products/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: items.map((item) => Number(item.id)) }),
+      })
+        .then((response) => response.json())
+        .then((data: { unavailableIds?: number[] }) => {
+          const unavailable = new Set(data.unavailableIds || []);
+          if (unavailable.size) {
+            items.filter((item) => unavailable.has(Number(item.id))).forEach((item) => removeItem(item.id));
+            setOwnershipNotice("นำหนังสือที่ถูกซ่อนออกจากตะกร้าให้แล้ว");
+          }
+        })
+        .catch((error: unknown) => console.error("ตรวจสอบหนังสือที่เผยแพร่ไม่สำเร็จ:", error));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [items, removeItem, loaded]);
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen bg-[#F6FBF5] text-[#1A2E22]">
+        <Header />
+        <main className="mx-auto max-w-7xl px-4 py-16 text-center text-sm text-[#71877a] md:px-8">
+          กำลังโหลดตะกร้า...
+        </main>
+      </div>
+    );
+  }
 
   async function handleCheckout() {
     setError("");
+    if (selectedItems.length === 0) {
+      setError("กรุณาเลือกหนังสืออย่างน้อย 1 เล่มเพื่อชำระเงิน");
+      return;
+    }
     setPlacing(true);
-    const supabase = createClient();
-
-    // ต้องล็อกอินก่อนสั่งซื้อ
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
-      setPlacing(false);
-      router.push("/login");
-      return;
-    }
-
-    // สร้างออเดอร์สถานะ pending
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        user_id: userData.user.id,
-        total,
-        status: "pending",
-      })
-      .select("id")
-      .single();
-
-    if (orderError || !order) {
-      console.error("Failed to create order:", orderError);
-      setError("สั่งซื้อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
-      setPlacing(false);
-      return;
-    }
-
-    const { error: itemsError } = await supabase.from("order_items").insert(
-      items.map((i) => ({
-        order_id: order.id,
-        product_id: Number(i.id),
-        title: i.title,
-        price: i.price,
-        qty: i.qty,
-      }))
-    );
-
-    if (itemsError) {
-      console.error("Failed to save order items:", itemsError);
-      setError("บันทึกรายการหนังสือไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
-      setPlacing(false);
-      return;
-    }
-
-    // เรียก API route เพื่อสร้าง Stripe Checkout Session
     try {
-      const res = await fetch("/api/checkout", {
+      const res = await fetch("/api/checkout/direct", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ orderId: order.id }),
+        body: JSON.stringify({
+          items: selectedItems.map((item) => ({ productId: Number(item.id), quantity: item.qty })),
+        }),
       });
 
       const data = await res.json();
+
+      if (res.status === 401) {
+        setPlacing(false);
+        router.push(`/login?next=${encodeURIComponent("/cart")}`);
+        return;
+      }
 
       if (!res.ok || !data.url) {
         setError(data.error || "สร้างรายการชำระเงินไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
@@ -82,10 +133,8 @@ export default function CartPage() {
         return;
       }
 
-      // ล้างตะกร้าและ redirect ไปหน้าชำระเงินของ Stripe
-      clear();
-      setOrderId(order.id);
-      window.location.href = data.url;
+      localStorage.setItem(`folio-pending-cart:${data.orderId}`, JSON.stringify(selectedItems.map((item) => String(item.id))));
+      window.location.assign(data.url);
     } catch (err: unknown) {
       console.error("Checkout request failed:", err);
       setError("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง");
@@ -112,7 +161,7 @@ export default function CartPage() {
             </h1>
             <p className="mt-1 text-xs text-[#71877a]">
               {count > 0
-                ? `${count} เล่มในตะกร้าของคุณ`
+                ? `${count} เล่มในตะกร้าของคุณ · เลือกชำระ ${selectedCount} เล่ม`
                 : "เริ่มสะสมวรรณกรรมคัดสรรของคุณ"}
             </p>
           </div>
@@ -126,25 +175,7 @@ export default function CartPage() {
           )}
         </div>
 
-        {orderId !== null ? (
-          <div className="rounded-2xl border border-[#e3ece5] bg-white px-6 py-16 text-center shadow-sm">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#1b3b2b] text-xl text-white">
-              ✓
-            </div>
-            <p className="font-serif text-lg font-bold text-[#142d20]">
-              สั่งซื้อสำเร็จ
-            </p>
-            <p className="mt-1 text-xs text-[#71877a]">
-              หมายเลขคำสั่งซื้อ #{orderId}
-            </p>
-            <Link
-              href="/"
-              className="mt-6 inline-block rounded-lg bg-[#1b3b2b] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#142d20]"
-            >
-              กลับไปเลือกหนังสือต่อ
-            </Link>
-          </div>
-        ) : items.length === 0 ? (
+        {items.length === 0 ? (
           <div className="rounded-2xl border border-[#e3ece5] bg-white px-6 py-16 text-center shadow-sm">
             <div className="mb-3 text-4xl">📚</div>
             <p className="font-serif text-lg font-bold text-[#142d20]">
@@ -164,14 +195,34 @@ export default function CartPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             {/* รายการสินค้า */}
             <ul className="space-y-3 lg:col-span-8">
+              <li className="flex items-center gap-2 text-xs text-[#52685b]">
+                <input
+                  type="checkbox"
+                  checked={allItemsSelected}
+                  onChange={toggleAll}
+                  className="h-4 w-4 rounded border-[#dce6de] text-[#1b3b2b] focus:ring-[#1b3b2b]"
+                />
+                <span>เลือกหนังสือทั้งหมด</span>
+              </li>
               {items.map((item) => {
-                const color =
-                  coverColors[(Number(item.id) || 0) % coverColors.length];
+                const color = coverColor(Number(item.id) || 0);
+                const isSelected = selectedIds.has(String(item.id));
                 return (
                   <li
                     key={item.id}
-                    className="flex gap-4 rounded-xl border border-[#e3ece5] bg-white p-3 transition hover:border-[#1b3b2b]"
+                    className={`flex gap-4 rounded-xl border bg-white p-3 transition hover:border-[#1b3b2b] ${
+                      isSelected ? "border-[#1b3b2b]" : "border-[#e3ece5]"
+                    }`}
                   >
+                    <div className="flex items-start pt-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelected(item.id)}
+                        aria-label={`เลือก ${item.title} เพื่อชำระเงิน`}
+                        className="h-4 w-4 rounded border-[#dce6de] text-[#1b3b2b] focus:ring-[#1b3b2b]"
+                      />
+                    </div>
                     <div
                       className="flex h-24 w-16 shrink-0 items-center justify-center rounded-lg p-2 text-center"
                       style={{ backgroundColor: color }}
@@ -240,7 +291,7 @@ export default function CartPage() {
                 <div className="space-y-2 text-xs text-[#c6d8cc]">
                   <div className="flex justify-between">
                     <span>จำนวนหนังสือ</span>
-                    <span>{count} เล่ม</span>
+                    <span>{selectedCount} เล่ม</span>
                   </div>
                   <div className="flex justify-between">
                     <span>การจัดส่ง</span>
@@ -251,16 +302,16 @@ export default function CartPage() {
                 <div className="my-4 flex items-end justify-between border-t border-[#294b37] pt-4">
                   <span className="text-xs text-[#a3b8ac]">ยอดรวมทั้งหมด</span>
                   <span className="font-serif text-2xl font-bold">
-                    ฿{total.toLocaleString()}
+                    ฿{selectedTotal.toLocaleString()}
                   </span>
                 </div>
 
                 <button
                   onClick={handleCheckout}
-                  disabled={placing}
+                  disabled={placing || selectedItems.length === 0}
                   className="w-full rounded-lg bg-[#C5A059] py-2.5 text-xs font-bold text-[#142d20] hover:bg-[#d4af37] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {placing ? "กำลังไปหน้าชำระเงิน..." : "สั่งซื้อ"}
+                  {placing ? "กำลังไปหน้าชำระเงิน..." : selectedItems.length === 0 ? "เลือกหนังสือเพื่อชำระ" : "สั่งซื้อ"}
                 </button>
 
                 {error && (
@@ -268,6 +319,7 @@ export default function CartPage() {
                     {error}
                   </p>
                 )}
+                {ownershipNotice && <p className="mt-4 text-xs text-[#1b3b2b]">{ownershipNotice}</p>}
 
                 <p className="mt-3 text-center text-[10px] text-[#a3b8ac]">
                   ไฟล์ EPUB &amp; PDF ต้นฉบับ • ไร้ DRM
