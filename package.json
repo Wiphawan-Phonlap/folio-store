@@ -10,6 +10,12 @@
     "seed:books": "tsx scripts/seed-books.ts",
     "seed:intros": "tsx scripts/seed-intros.ts"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "unrs-resolver"
+    ]
+  },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
     "@supabase/ssr": "^0.12.7",
