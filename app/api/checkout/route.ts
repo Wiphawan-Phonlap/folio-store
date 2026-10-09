@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { getPaymentSuccessUrl } from "@/lib/payment-return-url";
 
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const rawOrderId = body.orderId ?? body.order_id;
+    const native = body.native === true;
 
     if (!rawOrderId) {
       return NextResponse.json(
@@ -155,7 +157,7 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       line_items,
       mode: "payment",
-      success_url: `${origin}/checkout/success?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: getPaymentSuccessUrl(origin, order.id, native),
       cancel_url: `${origin}/cart`,
       client_reference_id: String(order.id),
       customer_email: user.email,

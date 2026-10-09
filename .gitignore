@@ -20,6 +20,13 @@
 # production
 /build
 
+# Capacitor Android generated files
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/capacitor-cordova-android-plugins/build/
+/android/local.properties
+
 # misc
 .DS_Store
 *.pem

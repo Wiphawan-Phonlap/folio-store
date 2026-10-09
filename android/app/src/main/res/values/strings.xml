@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Folio &amp; Co.</string>
+    <string name="title_activity_main">Folio &amp; Co.</string>
+    <string name="package_name">com.folioandco.store</string>
+    <string name="custom_url_scheme">com.folioandco.store</string>
+</resources>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { isNativeApp, openPaymentUrl } from "@/lib/capacitor-payment";
 
 export default function BuyNowButton({
   productId,
@@ -34,7 +35,10 @@ export default function BuyNowButton({
       const response = await fetch("/api/checkout/direct", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: [{ productId, quantity: 1 }] }),
+        body: JSON.stringify({
+          items: [{ productId, quantity: 1 }],
+          native: isNativeApp(),
+        }),
       });
       const data = await response.json();
       if (response.status === 401) {
@@ -47,7 +51,7 @@ export default function BuyNowButton({
         setLoading(false);
         return;
       }
-      window.location.assign(data.url);
+      await openPaymentUrl(data.url);
     } catch (requestError: unknown) {
       console.error("Buy now request failed:", requestError);
       setError("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง");

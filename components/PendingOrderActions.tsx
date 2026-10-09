@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isNativeApp, openPaymentUrl } from "@/lib/capacitor-payment";
 
 export default function PendingOrderActions({ orderId }: { orderId: number }) {
   const [loading, setLoading] = useState<"pay" | "cancel" | null>(null);
@@ -8,11 +9,15 @@ export default function PendingOrderActions({ orderId }: { orderId: number }) {
 
   async function pay() {
     setLoading("pay"); setError("");
-    const response = await fetch(`/api/orders/${orderId}/pay`, { method: "POST" });
+    const response = await fetch(`/api/orders/${orderId}/pay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ native: isNativeApp() }),
+    });
     const data = await response.json();
     setLoading(null);
     if (!response.ok || !data.url) { setError(data.error || "ไม่สามารถเปิดหน้าชำระเงินได้"); return; }
-    window.location.assign(data.url);
+    await openPaymentUrl(data.url);
   }
 
   async function cancel() {

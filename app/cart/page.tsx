@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import { useCart } from "@/lib/cart";
 import { coverColor } from "@/lib/cover-colors";
+import { isNativeApp, openPaymentUrl } from "@/lib/capacitor-payment";
 
 export default function CartPage() {
   const router = useRouter();
@@ -116,6 +117,7 @@ export default function CartPage() {
         },
         body: JSON.stringify({
           items: selectedItems.map((item) => ({ productId: Number(item.id), quantity: item.qty })),
+          native: isNativeApp(),
         }),
       });
 
@@ -134,7 +136,7 @@ export default function CartPage() {
       }
 
       localStorage.setItem(`folio-pending-cart:${data.orderId}`, JSON.stringify(selectedItems.map((item) => String(item.id))));
-      window.location.assign(data.url);
+      await openPaymentUrl(data.url);
     } catch (err: unknown) {
       console.error("Checkout request failed:", err);
       setError("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง");

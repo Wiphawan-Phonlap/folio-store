@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getStripe } from "@/lib/stripe";
+import { getPaymentSuccessUrl } from "@/lib/payment-return-url";
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const body = await req.json().catch(() => ({}));
+  const native = body.native === true;
   const { data: { user } } = await (await createClient()).auth.getUser();
   if (!user) return NextResponse.json({ error: "กรุณาเข้าสู่ระบบก่อนดำเนินการ" }, { status: 401 });
 
@@ -85,7 +88,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       quantity: 1,
     })),
     mode: "payment",
-    success_url: `${origin}/checkout/success?order_id=${orderId}&session_id={CHECKOUT_SESSION_ID}`,
+    success_url: getPaymentSuccessUrl(origin, orderId, native),
     cancel_url: `${origin}/orders`,
     client_reference_id: String(orderId),
     customer_email: user.email,

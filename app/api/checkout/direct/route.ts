@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getStripe } from "@/lib/stripe";
+import { getPaymentSuccessUrl } from "@/lib/payment-return-url";
 
 type CheckoutItem = { productId: number; quantity: number };
 type ProductRow = { id: number; title: string; price: number; is_published: boolean | null };
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
+    const native = body.native === true;
     const items: CheckoutItem[] = Array.isArray(body.items)
       ? body.items
         .map((item: { productId?: unknown; quantity?: unknown }): CheckoutItem => ({
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
         quantity: item.qty,
       })),
       mode: "payment",
-      success_url: `${origin}/checkout/success?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: getPaymentSuccessUrl(origin, order.id, native),
       cancel_url: `${origin}/cart`,
       client_reference_id: String(order.id),
       customer_email: user.email,
