@@ -70,12 +70,28 @@ function LibraryContent() {
     setDlError("");
     const response = await fetch(`/api/library/download?productId=${productId}&format=${format}`);
     const data = await response.json();
-    setDownloadingKey(null);
     if (!response.ok || !data.url) {
+      setDownloadingKey(null);
       setDlError(data.error || "ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่ภายหลัง");
       return;
     }
-    window.location.assign(data.url);
+    try {
+      const fileResponse = await fetch(data.url);
+      if (!fileResponse.ok) throw new Error("ดาวน์โหลดไฟล์ไม่สำเร็จ");
+      const blob = await fileResponse.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `folio-book-${productId}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setDlError("ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่ภายหลัง");
+    } finally {
+      setDownloadingKey(null);
+    }
   }
 
   function statusLabel(status: string) {
