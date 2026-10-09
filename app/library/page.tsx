@@ -30,6 +30,7 @@ function LibraryContent() {
   const [error, setError] = useState("");
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
   const [dlError, setDlError] = useState("");
+  const [downloadNotice, setDownloadNotice] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -68,6 +69,8 @@ function LibraryContent() {
   async function handleDownload(productId: number, format: "pdf" | "epub", key: string) {
     setDownloadingKey(key);
     setDlError("");
+    setDownloadNotice(true);
+    window.setTimeout(() => setDownloadNotice(false), 5000);
     const response = await fetch(`/api/library/download?productId=${productId}&format=${format}`);
     const data = await response.json();
     if (!response.ok || !data.url) {
@@ -103,6 +106,18 @@ function LibraryContent() {
   return (
     <div className="min-h-screen bg-[#F6FBF5] text-[#1A2E22]">
       <Header />
+
+      {downloadNotice && (
+        <div
+          role="status"
+          className="fixed right-4 top-20 z-50 max-w-sm rounded-xl border border-[#C5A059] bg-white px-4 py-3 text-xs text-[#1B3B2B] shadow-lg"
+        >
+          <p className="font-semibold">กำลังดาวน์โหลดหนังสือ...</p>
+          <p className="mt-1 text-[#71877A]">
+            กรุณาตรวจสอบไฟล์ได้ที่โฟลเดอร์ Downloads ในคอมพิวเตอร์ของคุณ
+          </p>
+        </div>
+      )}
 
       <main className="mx-auto max-w-4xl px-4 py-8 md:px-8">
         <Link
