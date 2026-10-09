@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import AddToCartButton from "@/components/AddToCartButton";
 import BuyNowButton from "@/components/BuyNowButton";
@@ -47,11 +48,11 @@ async function BookDetailsContent({
 
         <section className="mt-6 grid gap-8 rounded-[12px] border border-[#E3ECE5] bg-white p-5 shadow-sm md:grid-cols-[280px_1fr] md:p-8">
           <div
-            className="flex aspect-[3/4] items-center justify-center rounded-[12px] p-8 text-center shadow-lg"
+            className="relative flex aspect-[3/4] items-center justify-center rounded-[12px] p-8 text-center shadow-lg"
             style={{ backgroundColor: bookCoverColor }}
           >
             {coverUrl ? (
-              <img src={coverUrl} alt={`ปก ${product.title}`} className="h-full w-full rounded-[12px] object-cover" />
+              <Image src={coverUrl} alt={`ปก ${product.title}`} fill sizes="(max-width: 768px) 90vw, 280px" className="rounded-[12px] object-cover" />
             ) : <div>
               <p className="mb-8 text-[10px] uppercase tracking-[0.2em] text-[#C5A059]">
                 Folio &amp; Co.

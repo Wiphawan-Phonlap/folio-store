@@ -1,5 +1,6 @@
 import AddToCartButton from "./AddToCartButton";
 import Link from "next/link";
+import Image from "next/image";
 import { coverColor } from "@/lib/cover-colors";
 
 export type Product = {
@@ -35,7 +36,9 @@ export default function BookCard({
         style={{ backgroundColor: color }}
       >
         {product.cover_url ? (
-          <img src={product.cover_url} alt={`ปก ${product.title}`} className="h-full w-full rounded object-cover" />
+          <div className="relative h-full w-full">
+            <Image src={product.cover_url} alt={`ปก ${product.title}`} fill sizes="(max-width: 768px) 50vw, 240px" className="rounded object-cover" />
+          </div>
         ) : (
           <span className="font-serif text-base italic leading-tight text-white">{product.title}</span>
         )}

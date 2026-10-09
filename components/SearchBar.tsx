@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 
 type SearchProduct = {
   id: number;
@@ -158,9 +159,9 @@ function SearchBarContent() {
                     }}
                     className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-[#f0f5f0]"
                   >
-                    <span className="flex h-10 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-[#1b3b2b] text-[8px] text-white">
+                    <span className="relative flex h-10 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-[#1b3b2b] text-[8px] text-white">
                       {product.cover_url ? (
-                        <img src={product.cover_url} alt="" className="h-full w-full object-cover" />
+                        <Image src={product.cover_url} alt="" fill sizes="32px" className="object-cover" />
                       ) : (
                         "F"
                       )}
